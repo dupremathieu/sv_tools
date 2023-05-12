@@ -1,0 +1,9 @@
+[package]
+name = "sv_tools"
+version = "0.1.0"
+authors = ["Mathieu Dupré <mathieu.dupre@savoirfairelinux.com>"]
+edition = "2018"
+
+[dependencies]
+pcap = "1.1.0"
+clap = "3.0.0"
