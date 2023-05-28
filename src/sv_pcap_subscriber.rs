@@ -1,5 +1,5 @@
 extern crate pcap;
-use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,14 +29,23 @@ pub fn subscribe(interface: &str, output_file: &str, running: Arc<AtomicBool>) {
             match cap.next_packet() {
                 Ok(packet) => {
                     // Get the current timestamp
-                    let timestamp =  Instant::now();
+                    let timestamp: u64;
+                    match SystemTime::now().duration_since(UNIX_EPOCH) { 
+                        Ok(n) => {
+                            timestamp = n.as_secs() * 1_000_000 + n.subsec_micros() as u64;
+                        }
+                        Err(_) => panic!("Cannot get time!"),
+                    }
                     // Get the packet timestamp
                     let packet_timestamp = packet.header.ts.tv_sec as u64 * 1000000 + packet.header.ts.tv_usec as u64;
                     // Calculate the latency
-                    let latency = timestamp.elapsed().as_micros() as u64 - packet_timestamp;
+                    let latency = timestamp - packet_timestamp;
                     // write latency to file
-                    if let Err(e) = writeln!(file, "latency {} {}", timestamp.elapsed().as_micros(), latency) {
+                    if let Err(e) = writeln!(file, "latency {} {} {}", packet_timestamp, timestamp, latency) {
                         eprintln!("Couldn't write to file: {}", e);
+                    }
+                    else {
+                        file.flush().expect("Could not flush file");
                     }
                     // Get the packet length
                     // let packet_length = packet.header.len;
