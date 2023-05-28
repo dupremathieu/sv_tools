@@ -1,6 +1,9 @@
 extern crate pcap;
 extern crate clap;
+extern crate ctrlc;
 use clap::{Arg, App};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 mod sv_pcap_subscriber;
 
@@ -27,5 +30,13 @@ fn main() {
     let interface = matches.value_of("interface").unwrap_or("default");
     // Gets a value for output file if supplied by user
     let output_file = matches.value_of("output").unwrap_or("latency.txt");
-    sv_pcap_subscriber::subscribe(interface, output_file);
+
+    // Setup a boolean to indicate when to stop the program
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error setting Ctrl-C handler");
+
+    sv_pcap_subscriber::subscribe(interface, output_file, running);
 }

@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 pcap = "1.1.0"
 clap = "3.0.0"
+ctrlc = "3.3.1"

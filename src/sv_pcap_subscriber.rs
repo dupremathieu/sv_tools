@@ -2,8 +2,10 @@ extern crate pcap;
 use std::time::Instant;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-pub fn subscribe(interface: &str, output_file: &str) {
+pub fn subscribe(interface: &str, output_file: &str, running: Arc<AtomicBool>) {
     let mut cap = pcap::Capture::from_device(interface) // use the provided interface
         .expect("Error opening device")
         .promisc(true)
@@ -21,20 +23,36 @@ pub fn subscribe(interface: &str, output_file: &str) {
         .open(output_file)
         .expect("Error opening file");
 
-    while let Ok(packet) = cap.next_packet() {
-        // Get the current timestamp
-        let timestamp =  Instant::now();
-        // Get the packet timestamp
-        let packet_timestamp = packet.header.ts.tv_sec as u64 * 1000000 + packet.header.ts.tv_usec as u64;
-        // Calculate the latency
-        let latency = timestamp.elapsed().as_micros() as u64 - packet_timestamp;
-        // write latency to file
-        if let Err(e) = writeln!(file, "latency {} {}", timestamp.elapsed().as_micros(), latency) {
-            eprintln!("Couldn't write to file: {}", e);
+
+    loop {
+        if running.load(Ordering::SeqCst) {
+            match cap.next_packet() {
+                Ok(packet) => {
+                    // Get the current timestamp
+                    let timestamp =  Instant::now();
+                    // Get the packet timestamp
+                    let packet_timestamp = packet.header.ts.tv_sec as u64 * 1000000 + packet.header.ts.tv_usec as u64;
+                    // Calculate the latency
+                    let latency = timestamp.elapsed().as_micros() as u64 - packet_timestamp;
+                    // write latency to file
+                    if let Err(e) = writeln!(file, "latency {} {}", timestamp.elapsed().as_micros(), latency) {
+                        eprintln!("Couldn't write to file: {}", e);
+                    }
+                    // Get the packet length
+                    // let packet_length = packet.header.len;
+                    // Parse IEC 61850 Sampled Values
+                    //let sv = sv_parser(&packet.data[42..packet_length as usize]);
+                },
+                Err(pcap::Error::NoMorePackets) => {
+                    break;
+                },
+                Err(e) => {
+                    eprintln!("Error reading packet: {}", e);
+                },
+            }
+        } else {
+            break; // SIGINT or SIGTERM received, break the loop
         }
-        // Get the packet length
-        // let packet_length = packet.header.len;
-        // Parse IEC 61850 Sampled Values
-        //let sv = sv_parser(&packet.data[42..packet_length as usize]);
     }
+
 }
